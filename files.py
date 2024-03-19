@@ -14,7 +14,6 @@ def update_extraction_progress(count, total, callback):
 def extract_all(zip_path, extract_to, overwrite=False, callback=None):
     with zipfile.ZipFile(zip_path, 'r') as zip_ref:
         if '.zip' not in zip_path: return;
-        print(f"Extracting {zip_path}")
         with zipfile.ZipFile(zip_path, 'r') as zip_ref:
             all_files = zip_ref.namelist()
             total_files = len(all_files)

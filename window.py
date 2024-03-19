@@ -12,7 +12,7 @@ from installer import InstallWorker
 from redirector import StreamRedirector
 from styles import console_style, dark_theme_style
 
-version = "2.1.0"
+version = "2.1.5"
 update_url = "https://jbruth.com/v/updater.info.json"
 
 class CustomTitleBar(QWidget):
