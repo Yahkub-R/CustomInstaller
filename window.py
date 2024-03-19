@@ -323,15 +323,12 @@ class MainUI(QMainWindow):
 
     def startInstall(self):
         path = self.filePath.text() + "/" + self.gameCombo.currentText() + "." + self.versionCombo.currentText()
-        log_path = os.path.join(path, f"{self.gameCombo.currentText()}.{self.versionCombo.currentText()}.log")
+        log_path = os.path.join(path, f"logs/{self.gameCombo.currentText()}.{self.versionCombo.currentText()}.log")
         sys.stdout = StreamRedirector(self.console, log_path)
         sys.stderr = StreamRedirector(self.console, log_path)
-        with open(log_path, 'w') as file:
-            file.write("")
-            now = datetime.now()
-            current_time = now.strftime("%H:%M:%S")
-            print("Current Time =", current_time)
-            self.initialized = True
+        os.makedirs(path, exist_ok=True)
+        os.makedirs(os.path.join(path,"logs"), exist_ok=True)
+
         self.console.clear()
         self.setupInstall()  # Setup the thread and worker
         self.thread.start()  # Start the thread

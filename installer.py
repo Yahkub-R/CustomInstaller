@@ -8,6 +8,8 @@ import shlex
 from PyQt5.QtCore import QObject, pyqtSignal
 import os
 
+from src import files
+
 
 @contextmanager
 def custom_print(emit_func, buffer_size=0):
@@ -50,9 +52,10 @@ class InstallWorker(QObject):
         with custom_print(self.progress.emit):
             path = self.filePath.text() + "/" + self.gameCombo.currentText() + "." + self.versionCombo.currentText()
             os.makedirs(path, exist_ok=True)
+            os.makedirs(os.path.join(path,"logs"), exist_ok=True)
             downloads = os.path.join(path, "download")
             installed_progress_path = os.path.join(path,
-                                                   f"{self.gameCombo.currentText()}.{self.versionCombo.currentText()}.progress.log")
+                                                   f"logs/{self.gameCombo.currentText()}.{self.versionCombo.currentText()}.progress.log")
 
             steps = self.data["steps"]
 
@@ -71,8 +74,7 @@ class InstallWorker(QObject):
                     type = step['type']
                     name = step['name']
 
-                    # Skip this step if it's already completed
-                    if f"{type}:{name}" in completed_steps or 'force' in step:
+                    if f"{type}:{name}" in completed_steps and 'force' not in step:
                         steps_done += 1
                         progress.write(f"{type}:{name}\n")
                         print(f"🟢 ({steps_done}/{steps_total}): {type}:{name}")
@@ -82,12 +84,20 @@ class InstallWorker(QObject):
                             case 'download':
                                 downloaded = files.download(step['url'], downloads, callback=self.display)
                                 if 'to' in step:
-                                    os.makedirs(os.path.join(path, step["to"]), exist_ok=True)
-                                if ".zip" in downloaded:
-                                    files.extract(downloaded, os.path.join(path, step["to"]), callback=self.display)
-                                elif 'to' in step:
-                                    destination = os.path.join(path, step["to"], name)
-                                    shutil.copy(downloaded, destination)
+                                    destination_path = os.path.join(path, step["to"])
+                                    os.makedirs(destination_path, exist_ok=True)
+                                    if ".zip" in downloaded:
+                                        specific_file = step.get("specific_file")
+                                        specific_folder = step.get("specific_folder")
+                                        files.extract(downloaded, destination_path, specific_file=specific_file, specific_folder=specific_folder,
+                                                      callback=self.display)
+                                    else:
+                                        if 'name' in step:
+                                            destination = os.path.join(destination_path, step["name"])
+                                        else:
+                                            destination = os.path.join(destination_path, os.path.basename(downloaded))
+                                        shutil.copy(downloaded, destination)
+
                             case 'execute':
                                 shell_cmd = shlex.split(step['command'], posix=False)
                                 print(os.path.realpath(path))
@@ -98,24 +108,27 @@ class InstallWorker(QObject):
                                 print(results.stdout)
                             case 'json':
                                 json_file_path = os.path.join(path, step["file"]).replace("\\", "/")
-                                # Ensure the file exists
-                                if os.path.isfile(json_file_path):
-                                    # Load the current JSON data from the file
-                                    with open(json_file_path, 'r') as file:
-                                        data = json.load(file)
-
-                                    # Modify the specified entry
-                                    # This assumes the 'from' key exists at the top level of the JSON structure
-                                    if step["from"] in data:
-                                        data[step["from"]] = step["to"]
-                                        # Save the modified JSON data back to the file
-                                        with open(json_file_path, 'w') as file:
-                                            json.dump(data, file, indent=4)
-                                    else:
-                                        raise Exception(f"Key '{step['from']}' not found in {json_file_path}")
+                                # Check if the file exists
+                                if not os.path.exists(json_file_path):
+                                    # If the file does not exist, create it and initialize with the key/value from 'step'
+                                    initial_data = {step["from"]: step["to"]}
+                                    with open(json_file_path, 'w') as file:
+                                        json.dump(initial_data, file, indent=4)
                                 else:
-                                    print(f"File {json_file_path} not found")
-                                    raise Exception(f"Key '{step['from']}' not found in {json_file_path}")
+                                    # If the file exists, load its content
+                                    with open(json_file_path, 'r') as file:
+                                        try:
+                                            data = json.load(file)
+                                        except json.JSONDecodeError:
+                                            # Handle empty file by initializing data as an empty dictionary
+                                            data = {}
+
+                                    # Modify the specified entry or add it if it doesn't exist
+                                    data[step["from"]] = step["to"]
+
+                                    # Save the modified or newly added JSON data back to the file
+                                    with open(json_file_path, 'w') as file:
+                                        json.dump(data, file, indent=4)
                             case 'txt':
                                 txt_file_path = os.path.join(path, step["file"]).replace("\\", "/")
                                 # Ensure the file exists
