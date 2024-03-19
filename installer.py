@@ -8,7 +8,7 @@ import shlex
 from PyQt5.QtCore import QObject, pyqtSignal
 import os
 
-from src import files
+import files
 
 
 @contextmanager
