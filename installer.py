@@ -106,6 +106,14 @@ class InstallWorker(QObject):
                                 if results.stderr:
                                     raise Exception("Failed to run command")
                                 print(results.stdout)
+                            case 'extract':
+                                destination_path = os.path.join(path, step["to"])
+                                file = os.path.join(path, step["file"])
+                                specific_file = step.get("specific_file")
+                                specific_folder = step.get("specific_folder")
+                                files.extract(file, destination_path, specific_file=specific_file,
+                                              specific_folder=specific_folder,
+                                      callback=self.display)
                             case 'json':
                                 json_file_path = os.path.join(path, step["file"]).replace("\\", "/")
                                 # Check if the file exists
