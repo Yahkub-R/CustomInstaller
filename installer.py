@@ -41,8 +41,9 @@ class InstallWorker(QObject):
     progress = pyqtSignal(str)  # Signal to update progress (e.g., print statements)
     percent = 0
 
-    def __init__(self, getVersion, gameCombo, versionCombo, filePath):
+    def __init__(self, path, getVersion, gameCombo, versionCombo, filePath):
         super().__init__()
+        self.path = path
         self.data = getVersion()
         self.gameCombo = gameCombo
         self.versionCombo = versionCombo
@@ -50,7 +51,7 @@ class InstallWorker(QObject):
 
     def run(self):
         with custom_print(self.progress.emit):
-            path = self.filePath.text() + "/" + self.gameCombo.currentText() + "." + self.versionCombo.currentText()
+            path = self.path
             os.makedirs(path, exist_ok=True)
             os.makedirs(os.path.join(path,"logs"), exist_ok=True)
             downloads = os.path.join(path, "download")
@@ -74,7 +75,7 @@ class InstallWorker(QObject):
                     type = step['type']
                     name = step['name']
 
-                    if f"{type}:{name}" in completed_steps and 'force' not in step:
+                    if (f"{type}:{name}" in completed_steps and 'force' not in step) or 'skip' in step:
                         steps_done += 1
                         progress.write(f"{type}:{name}\n")
                         print(f"🟢 ({steps_done}/{steps_total}): {type}:{name}")
@@ -89,8 +90,12 @@ class InstallWorker(QObject):
                                     if ".zip" in downloaded:
                                         specific_file = step.get("specific_file")
                                         specific_folder = step.get("specific_folder")
+                                        overwrite = False
+                                        if 'overwrite' in step:
+                                            overwrite = True
+
                                         files.extract(downloaded, destination_path, specific_file=specific_file, specific_folder=specific_folder,
-                                                      callback=self.display)
+                                                      callback=self.display, overwrite=overwrite)
                                     else:
                                         if 'name' in step:
                                             destination = os.path.join(destination_path, step["name"])
@@ -113,6 +118,32 @@ class InstallWorker(QObject):
                                 specific_folder = step.get("specific_folder")
                                 files.extract(file, destination_path, specific_file=specific_file,
                                               specific_folder=specific_folder, callback=self.display)
+                            case 'copy':
+                                if 'file' in step:
+                                    file = os.path.join(path, step["file"])
+                                    filename = step["file"].split("/")[-1]
+                                    destination_path = os.path.join(path, step["to"], filename)
+                                    os.makedirs(os.path.join(path, step["to"]), exist_ok=True)
+                                    shutil.copy(file, destination_path)
+                                elif 'folder' in step:
+                                    source_folder = os.path.join(path, step["folder"])
+                                    destination_folder = os.path.join(path, step["to"])
+                                    os.makedirs(destination_folder, exist_ok=True)
+                                    for root, dirs, all_files in os.walk(source_folder):
+                                        # Calculate the relative path to the source folder to maintain directory structure
+                                        rel_path = os.path.relpath(root, source_folder)
+                                        dest_rel_path = os.path.join(destination_folder, rel_path)
+
+                                        # Make sure every directory exists in the destination
+                                        os.makedirs(dest_rel_path, exist_ok=True)
+
+                                        for file in all_files:
+                                            # Construct the source and destination file paths
+                                            source_file_path = os.path.join(root, file)
+                                            dest_file_path = os.path.join(dest_rel_path, file)
+
+                                            # Copy each file, which will overwrite existing files
+                                            shutil.copy2(source_file_path, dest_file_path)
                             case 'json':
                                 json_file_path = os.path.join(path, step["file"]).replace("\\", "/")
                                 # Check if the file exists

@@ -27,8 +27,6 @@ def extract_all(zip_path, extract_to, overwrite=False, callback=None):
                     continue
 
                 zip_ref.extract(file_info, extract_to)
-                if overwrite and os.path.exists(target_path):
-                    os.remove(target_path)  # Remove the existing file to allow overwriting
                 os.rename(os.path.join(extract_to, file_info.filename), target_path)
 
                 extracted_count += 1

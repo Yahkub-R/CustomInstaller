@@ -10,8 +10,8 @@ class StreamRedirector:
 
     def write(self, text):
         self.widget.insertPlainText(text)
-        os.makedirs(self.filename,exist_ok=True)
         if self.filename is not None:
+            os.makedirs(self.filename,exist_ok=True)
             with open(self.filename, 'a') as file:
                 file.write(text)
 

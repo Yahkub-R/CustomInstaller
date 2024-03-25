@@ -1,3 +1,4 @@
+import json
 import os
 import subprocess
 import sys
@@ -12,8 +13,8 @@ from installer import InstallWorker
 from redirector import StreamRedirector
 from styles import console_style, dark_theme_style
 
-version = "2.1.5"
-update_url = "https://jbruth.com/v/updater.info.json"
+version = "2.1.6"
+update_url = "https://jbruth.com/v/effd89d9-7694-4e06-836e-bccc51bdb6b7/updater.info.json"
 
 class CustomTitleBar(QWidget):
     def __init__(self, parent=None):
@@ -172,7 +173,6 @@ class MainUI(QMainWindow):
         self.installButton = QPushButton("Install")
         self.installButton.clicked.connect(self.startInstall)
         buttonLayout.addWidget(self.installButton)
-        self.setupInstall()
 
         self.verifyButton = QPushButton("Verify")
         self.verifyButton.clicked.connect(self.verify)
@@ -221,9 +221,13 @@ class MainUI(QMainWindow):
         versions = self.fetch_versions(selected_game)
         self.versionCombo.clear()
         self.versionCombo.addItems(versions)
+        self.read_path(self.gameCombo.currentText() + "." + self.versionCombo.currentText())
+        self.print_message()
 
     def version_changed(self, index):
         selected_version = self.versionCombo.currentText()
+        self.print_message()
+        self.read_path(self.gameCombo.currentText() + "." + self.versionCombo.currentText())
 
     def checkForUpdates(self):
         try:
@@ -292,13 +296,15 @@ class MainUI(QMainWindow):
         self.scrollToBottomButton.move(console.x() + console.width() - 10, console.y() + console.height() + 18)
         # self.scrollToBottomButton.show()
         self.scroll()
+        self.read_path(self.gameCombo.currentText() + "." + self.versionCombo.currentText())
+        self.print_message()
     def getVersion(self):
         return self.data["games"][self.gameCombo.currentText()]["versions"][self.versionCombo.currentText()]
 
-    def setupInstall(self):
+    def setupInstall(self, path):
         # Setup the thread and worker
         self.thread = QThread()
-        self.worker = InstallWorker(self.getVersion, self.gameCombo, self.versionCombo, self.filePath)
+        self.worker = InstallWorker(path, self.getVersion, self.gameCombo, self.versionCombo, self.filePath)
         self.worker.moveToThread(self.thread)
         self.worker.finished.connect(self.done)  # Clean up the thread when done
         self.worker.progress.connect(self.updateConsole)  # Connect to a method to update the console
@@ -323,22 +329,67 @@ class MainUI(QMainWindow):
 
     def startInstall(self):
         path = self.filePath.text() + "/" + self.gameCombo.currentText() + "." + self.versionCombo.currentText()
+        existing_path = False
+        if 'existing_path' in self.getVersion():
+            if self.getVersion()['existing_path']:
+                path = self.filePath.text()
+                existing_path = True
+            else:
+                path = self.filePath.text() + "/" + self.gameCombo.currentText() + "." + self.versionCombo.currentText()
+
         log_path = os.path.join(path, f"logs/{self.gameCombo.currentText()}.{self.versionCombo.currentText()}.log")
         sys.stdout = StreamRedirector(self.console, log_path)
         sys.stderr = StreamRedirector(self.console, log_path)
         os.makedirs(path, exist_ok=True)
         os.makedirs(os.path.join(path,"logs"), exist_ok=True)
 
+        game_version = f"{self.gameCombo.currentText()}.{self.versionCombo.currentText()}"
+        self.store_paths(game_version, path, existing_path)
+
         self.console.clear()
-        self.setupInstall()  # Setup the thread and worker
+        self.setupInstall(path)  # Setup the thread and worker
         self.thread.start()  # Start the thread
 
+    def read_path(self, key):
+        file_path = "game_paths.json"
+        # Check if the JSON file exists
+        if os.path.exists(file_path):
+            with open(file_path, "r") as file:
+                data = json.load(file)
+                # Look for the key in the loaded data
+                if key in data:
+                    self.filePath.setText(data[key])
+                    return data[key]
+                else:
+                    self.filePath.setText(os.path.join(os.getcwd()))
+        else:
+            self.filePath.setText(os.path.join(os.getcwd()))
+    def store_paths(self, key, value, existing):
+        file_path = "game_paths.json"
+        # Check if the JSON file exists and load it; if not, initialize an empty dict
+        if os.path.exists(file_path):
+            with open(file_path, "r") as file:
+                data = json.load(file)
+        else:
+            data = {}
+        # Update the JSON data with the new key-value pair
+        data[key] = value.replace("/","\\")
+        if not existing:
+            data[key] = os.path.dirname(data[key])
+
+        # Write the updated data back to the JSON file
+        with open(file_path, "w") as file:
+            json.dump(data, file, indent=4)
     # Slot for query button click
     def verify(self):
         # self.disableControls()
         print("Verifying...")
 
-
+    def print_message(self):
+        self.console.clear()
+        version = self.getVersion()
+        if 'message' in version:
+            print(version['message'])
 
 
 # Main application code
